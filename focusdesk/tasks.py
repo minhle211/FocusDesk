@@ -1,4 +1,4 @@
-"""Rules for the task list.
+"""Rules for the task list and the saved focus blocks.
 
 Nothing in this file opens a window or touches a file. Pass in the desk
 dictionary, get back the updated desk dictionary.
@@ -78,3 +78,101 @@ def ordered_tasks(data):
         else:
             open_tasks.append(task)
     return open_tasks + done_tasks
+
+
+def add_session(data, minutes, kind, note, finished_at, finished_on):
+    """Remember one finished focus block or break."""
+    clean_note = note.strip()
+    if len(clean_note) > MAX_TEXT:
+        clean_note = clean_note[:MAX_TEXT].strip()
+
+    session = {
+        "minutes": minutes,
+        "kind": kind,
+        "note": clean_note,
+        "finished_at": finished_at,
+        "finished_on": finished_on,
+    }
+    data["sessions"].append(session)
+    return session
+
+
+def count_finished_tasks(data, day):
+    """Count tasks marked done on this day."""
+    total = 0
+    for task in data["tasks"]:
+        if task["done"] and task["done_on"] == day:
+            total = total + 1
+    return total
+
+
+def count_focus_minutes(data, day):
+    """Add up finished focus minutes for this day. Breaks are not included."""
+    total = 0
+    for session in data["sessions"]:
+        if session["finished_on"] == day and session["kind"] == "focus":
+            total = total + session["minutes"]
+    return total
+
+
+def sessions_on_day(data, day):
+    """Return that day's blocks, newest first."""
+    found = []
+    for session in data["sessions"]:
+        if session["finished_on"] == day:
+            found.append(session)
+    found.reverse()
+    return found
+
+
+def task_line(task):
+    """Return the row text for one task."""
+    if task["done"]:
+        box = "[x]"
+    else:
+        box = "[ ]"
+    return box + "  " + task["title"]
+
+
+def session_line(session):
+    """Return one finished block as a single line."""
+    if session["kind"] == "break":
+        label = str(session["minutes"]) + " min break"
+    else:
+        label = str(session["minutes"]) + " min focus"
+    if session["note"] == "":
+        return label
+    return label + " - " + session["note"]
+
+
+def amount(count, singular, plural):
+    """Return '1 task' or '2 tasks'."""
+    if count == 1:
+        return "1 " + singular
+    return str(count) + " " + plural
+
+
+def summary_text(data, day):
+    """Return the footer sentence for this day."""
+    task_count = count_finished_tasks(data, day)
+    minute_count = count_focus_minutes(data, day)
+    tasks = amount(task_count, "task", "tasks")
+    minutes = amount(minute_count, "minute", "minutes")
+    return "Today: " + tasks + " finished, " + minutes + " of focus"
+
+
+def finished_today_text(data, day):
+    """Return the lines shown under Finished today."""
+    sessions = sessions_on_day(data, day)
+    if len(sessions) == 0:
+        return "No finished blocks yet today."
+
+    lines = []
+    shown = 0
+    for session in sessions:
+        if shown == 6:
+            lines.append("Older blocks are still saved.")
+            break
+        lines.append(session_line(session))
+        shown = shown + 1
+    return "\n".join(lines)
