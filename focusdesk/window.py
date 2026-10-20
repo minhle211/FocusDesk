@@ -7,10 +7,12 @@ After each change, the window draws the screen again.
 
 import tkinter as tk
 
-from focusdesk.clock import today_text
+from focusdesk.clock import now_text, today_text
 from focusdesk.storage import load_desk, save_desk
 from focusdesk.tasks import (
+    add_session,
     add_task,
+    amount,
     finished_today_text,
     mark_task_done,
     ordered_tasks,
@@ -412,7 +414,7 @@ class DeskWindow:
 
         finished = self.timer.tick()
         if finished:
-            self.show_timer_state()
+            self.remember_finished_block()
         self.draw_clock()
         self.schedule_tick()
 
@@ -520,6 +522,46 @@ class DeskWindow:
         self.draw_clock()
         self.paint_presets()
         self.show_timer_state()
+
+    def remember_finished_block(self):
+        """Save the block that just hit 00:00 and tell the person."""
+        # length is stored in seconds. 60 seconds is one minute.
+        minutes = self.timer.length // 60
+        note = self.note_entry.get()
+        add_session(
+            self.data,
+            minutes,
+            self.timer.kind,
+            note,
+            now_text(),
+            today_text(),
+        )
+        self.note_entry.delete(0, "end")
+        saved = self.save()
+        self.chime()
+        self.draw_sessions()
+        self.draw_summary()
+
+        if not saved:
+            self.show_timer_error("Could not save the file.")
+            return
+        if self.timer.kind == "break":
+            self.show_timer_success("Break is over.")
+            return
+        saved_text = "Saved " + amount(minutes, "minute", "minutes") + " of focus."
+        self.show_timer_success(saved_text)
+
+    def on_close(self):
+        """Save one last time, then close the window."""
+        self.cancel_tick()
+        self.save()
+        self.root.destroy()
+
+    def chime(self):
+        """Beep when a block finishes. Hidden test windows stay quiet."""
+        if self.root.state() == "withdrawn":
+            return
+        self.root.bell()
 
     def show_task_error(self, text):
         self.task_message.config(text=text, fg=WARNING)
